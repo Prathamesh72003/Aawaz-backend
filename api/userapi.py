@@ -1,8 +1,22 @@
 import uuid
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
+from vonage import Client, Sms
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+my_key = os.getenv("AI_KEY")
 
 db = firestore.client()
+
+VONAGE_API_KEY = "1ce5e2b3"
+VONAGE_API_SECRET = "Nfm7AZb5HnqLNJ1n"
+
+vonage_client = Client(key=VONAGE_API_KEY, secret=VONAGE_API_SECRET)
+
+vonage_sms = Sms(vonage_client)
 
 user_ref = db.collection('users')
 station_ref = db.collection('stations')
@@ -53,21 +67,24 @@ def get_user(user_id):
 def get_station(station_name):
     try:
         station_doc = station_ref.document(station_name).get()
-        
+
         if station_doc.exists:
             station_data = station_doc.to_dict()
 
             subcollection_ref = station_ref.document(station_name).collection('feedbacks')
             subcollection_data = [doc.to_dict() for doc in subcollection_ref.stream()]
 
+            ratings = [int(feedback.get('ratings', 0)) for feedback in subcollection_data]
+            mean_rating = mean(ratings) if ratings else 0
+
             station_data['subcollection_data'] = subcollection_data
+            station_data['mean_rating'] = mean_rating
 
             return jsonify(station_data), 200
         else:
             return jsonify({'error': 'Station not found'}), 404
     except Exception as e:
-        return f"An Error Occurred: {e}"
-
+        return jsonify({'error': f"An error occurred: {e}"}), 500
 
 
 # **********************************GET FEEDBACK API*****************************************
@@ -137,10 +154,167 @@ def add_feedback(user_id):
 
 
 # **********************************List Stations API*****************************************
+from statistics import mean
+
 @userapi.route('/listStations', methods=['GET'])
 def read_stations():
     try:
-        stations = [doc.to_dict() for doc in station_ref.stream()]
-        return jsonify(stations), 200
+        stations_data = []
+
+        for station_doc in station_ref.stream():
+            station_data = station_doc.to_dict()
+
+            feedback_collection_ref = station_ref.document(station_doc.id).collection('feedbacks')
+            feedback_data = [doc.to_dict() for doc in feedback_collection_ref.stream()]
+
+            overall_rating = calculate_overall_rating(feedback_data)
+            station_data['overall_rating'] = overall_rating
+
+            station_data['feedbacks'] = feedback_data
+
+            stations_data.append(station_data)
+
+        return jsonify(stations_data), 200
     except Exception as e:
         return f"An Error Occurred: {e}"
+
+def calculate_overall_rating(feedback_data):
+    ratings = [int(feedback.get('ratings', 0)) for feedback in feedback_data]
+
+    overall_rating = mean(ratings) if ratings else 0
+
+    return overall_rating
+
+    
+# **********************************SEND SMS API*****************************************
+@userapi.route('/send_sms', methods=['POST'])
+def send_sms():
+    try:
+        data = request.json
+
+        to_phone_number = data.get('to_phone_number', None)
+        if not to_phone_number:
+            return jsonify({'error': 'Invalid phone number'}), 400
+
+        sms_text = data.get('sms_text', 'A text message sent using the Vonage SMS API')
+
+        response_data = vonage_sms.send_message(
+            {
+                "from": "Vonage APIs",
+                "to": to_phone_number,
+                "text": sms_text,
+            }
+        )
+
+        if response_data["messages"][0]["status"] == "0":
+            return jsonify({'success': True, 'message_id': response_data["messages"][0]["message-id"]}), 200
+        else:
+            return jsonify({'error': f"Message failed with error: {response_data['messages'][0]['error-text']}"}), 500
+
+    except Exception as e:
+        return jsonify({'error': f"An error occurred: {e}"}), 500
+    
+
+# **********************************POST CASE API*****************************************
+@userapi.route('/case/add/<string:station_name>', methods=['POST'])
+def post_case(station_name):
+    try:
+        case_data = request.json
+
+        case_number = case_data.get('case_number')
+
+        if not case_number:
+            return jsonify({'error': 'Case number is required in the request data'}), 400
+
+        ist = pytz.timezone('Asia/Kolkata')
+        case_data['date'] = datetime.now(ist).isoformat()
+
+        cases_collection_ref = station_ref.document(station_name).collection('cases').document(case_number)
+
+        cases_collection_ref.set(case_data)
+
+        case_data_with_id = cases_collection_ref.get().to_dict()
+
+        return jsonify({'success': True, 'case_data': case_data_with_id}), 200
+    except Exception as e:
+        return f"An Error Occurred: {e}"
+
+
+# **********************************GET CASES API*****************************************
+@userapi.route('/get_cases/<string:station_name>', methods=['GET'])
+def get_cases(station_name):
+    try:
+        cases_collection_ref = station_ref.document(station_name).collection('cases')
+
+        cases = [doc.to_dict() for doc in cases_collection_ref.stream()]
+
+        return jsonify(cases), 200
+    except Exception as e:
+        return f"An Error Occurred: {e}"
+    
+
+# **********************************UPDATE STATION STATUS API*****************************************
+@userapi.route('/update_station_status/<string:station_name>', methods=['PUT'])
+def update_station_status(station_name):
+    try:
+        new_status = request.json.get('new_status')
+
+        status_mapping = {'approve': 1, 'reject': 2}
+
+        if new_status not in status_mapping:
+            return jsonify({'error': 'Invalid status provided. Must be "approve" or "reject".'}), 400
+
+        station_doc_ref = station_ref.document(station_name)
+
+        station_doc_ref.update({'status': status_mapping[new_status]})
+
+        return jsonify({'success': True, 'message': f'Status updated to {status_mapping[new_status]} for station {station_name}'}), 200
+    except Exception as e:
+        return f"An Error Occurred: {e}"
+
+
+# **********************************SUMMARIZE THE DATA*****************************************
+from openai import OpenAI
+
+client = OpenAI(api_key=my_key)
+
+@userapi.route('/generate_summary', methods=['POST'])  
+def generate_summary():
+    try:
+        request_data = request.json
+        
+        json_data = request_data.get('data', [])
+
+        feedback_texts = [item["text"] for item in json_data]
+
+        input_text = "\n".join(feedback_texts)
+
+        prompt = f"""
+        Consider you are summarizing feedback on a police station's performance. Compile the following feedback into a concise summary. 
+        Maintain clarity, avoid jargon, and keep the summary under 150 words.
+
+        {input_text}
+
+        Additionally, analyze the sentiments expressed in the feedback and provide a count. Out of the given texts:
+
+        happy: {len([1 for item in json_data if "positive" in item["text"].lower() or "satisfied" in item["text"].lower()])}
+        sad: {len([1 for item in json_data if "unpleasant" in item["text"].lower() or "disappointed" in item["text"].lower()])}
+        """
+
+        engine_version = "gpt-3.5-turbo-instruct"
+
+        response = client.completions.create(
+            model=engine_version,
+            prompt=prompt,
+            max_tokens=150
+        )
+
+        summary = response.choices[0].text
+
+        return jsonify({'summary': summary}), 200
+
+    except Exception as e:
+        return jsonify({'error': f"An error occurred: {e}"}), 500
+
+
+
