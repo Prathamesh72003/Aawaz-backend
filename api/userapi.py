@@ -2,12 +2,12 @@ import uuid
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
 from vonage import Client, Sms
-from dotenv import load_dotenv
-import os
+# from dotenv import load_dotenv
+# import os
 
-load_dotenv()
+# load_dotenv()
 
-my_key = os.getenv("AI_KEY")
+my_key = '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'
 
 db = firestore.client()
 
