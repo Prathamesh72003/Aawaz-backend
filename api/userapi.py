@@ -107,7 +107,7 @@ def get_feedback():
                     'feedback_text': feedback_data.get('text', 'No text available'),
                     'feedback_ratings': feedback_data.get('ratings', None),
                     'date': feedback_data.get('date', None),
-                    'police_station': feedback_data.get('station', None),
+                    'police_station': feedback_data.get('station_name', None),
                     'user_name': user_data.get('name', None)
                 }
                 feedback_list.append(feedback_object)
