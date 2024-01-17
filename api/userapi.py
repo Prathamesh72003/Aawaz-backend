@@ -118,15 +118,19 @@ def get_feedback():
 @userapi.route('/feedback/<station_name>', methods=['GET'])
 def get_feedback_for_station(station_name):
     try:
+        # Directly access the stations collection
+        stations_ref = db.collection('stations')
+
         feedback_list = []
 
-        for user_doc in user_ref.stream():
-            user_data = user_doc.to_dict()
-            user_id = user_doc.id
+        # Query for the station document
+        station_doc = stations_ref.document(station_name).get()
 
-            feedback_collection_ref = user_ref.document(user_id).collection('feedbacks')
+        if station_doc.exists:
+            # Access the feedback collection within the station document
+            feedback_collection_ref = station_doc.reference.collection('feedbacks')
 
-            for feedback_doc in feedback_collection_ref.where('station_name', '==', station_name).stream():
+            for feedback_doc in feedback_collection_ref.stream():
                 feedback_data = feedback_doc.to_dict()
 
                 feedback_object = {
@@ -137,6 +141,7 @@ def get_feedback_for_station(station_name):
 
         # Return the feedback list as JSON
         return jsonify({'data': feedback_list}), 200
+
     except Exception as e:
         return jsonify({'error': f"An Error Occurred: {e}"}), 500
 
