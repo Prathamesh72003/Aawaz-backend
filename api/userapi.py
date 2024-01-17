@@ -8,7 +8,7 @@ from vonage import Client, Sms
 # load_dotenv()
 
 # my_key = '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'
-my_key = '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'
+my_key = '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'
 
 db = firestore.client()
 
