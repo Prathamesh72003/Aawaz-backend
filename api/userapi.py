@@ -7,7 +7,8 @@ from vonage import Client, Sms
 
 # load_dotenv()
 
-my_key = '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'
+# my_key = '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'
+my_key = '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'
 
 db = firestore.client()
 
@@ -316,5 +317,35 @@ def generate_summary():
     except Exception as e:
         return jsonify({'error': f"An error occurred: {e}"}), 500
 
+@userapi.route('/generate_feedback', methods=['POST'])  
+def generate_feedback():
+    try:
+        request_data = request.json
+        
+        json_data = request_data.get('data', [])
 
+        feedback_texts = [item["text"] for item in json_data]
 
+        input_text = "\n".join(feedback_texts)
+
+        prompt = f"""
+        Generate a meaningful feedback message as if you were a user based on the following conversation between the chatbot and user:
+
+        - {input_text}
+        """
+
+        engine_version = "gpt-3.5-turbo-instruct"
+
+        response = client.completions.create(
+            model=engine_version,
+            prompt=prompt,
+            max_tokens=150
+        )
+
+        summary = response.choices[0].text
+
+        return jsonify({'feedback': summary}), 200
+
+    except Exception as e:
+        return jsonify({'error': f"An error occurred: {e}"}), 500
+    
