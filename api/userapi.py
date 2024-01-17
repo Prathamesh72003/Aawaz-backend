@@ -197,7 +197,7 @@ def send_sms():
         if not to_phone_number:
             return jsonify({'error': 'Invalid phone number'}), 400
 
-        sms_text = data.get('sms_text', 'A text message sent using the Vonage SMS API')
+        sms_text = data.get('sms_text', 'Hello warm greetings from rajasthan police.. this is the gentele reminder message for your valuable feedback, You can access the page by the following link: ')
 
         response_data = vonage_sms.send_message(
             {
