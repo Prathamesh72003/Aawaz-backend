@@ -2,13 +2,11 @@ import uuid
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
 from vonage import Client, Sms
-# from dotenv import load_dotenv
-# import os
+from dotenv import load_dotenv
+import os
 
-# load_dotenv()
-
-# my_key = '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'
-my_key = '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'
+load_dotenv()
+my_key = os.getenv('Open_AI')
 
 db = firestore.client()
 
@@ -116,6 +114,32 @@ def get_feedback():
         return jsonify(feedback_list), 200
     except Exception as e:
         return f"An Error Occurred: {e}"
+
+@userapi.route('/feedback/<station_name>', methods=['GET'])
+def get_feedback_for_station(station_name):
+    try:
+        feedback_list = []
+
+        for user_doc in user_ref.stream():
+            user_data = user_doc.to_dict()
+            user_id = user_doc.id
+
+            feedback_collection_ref = user_ref.document(user_id).collection('feedbacks')
+
+            for feedback_doc in feedback_collection_ref.where('station_name', '==', station_name).stream():
+                feedback_data = feedback_doc.to_dict()
+
+                feedback_object = {
+                    'text': feedback_data.get('text', 'No text available'),
+                    # Add other properties as needed
+                }
+                feedback_list.append(feedback_object)
+
+        # Return the feedback list as JSON
+        return jsonify({'data': feedback_list}), 200
+    except Exception as e:
+        return jsonify({'error': f"An Error Occurred: {e}"}), 500
+
 
 # **********************************ADD FEEDBACK API*****************************************
 from datetime import datetime
