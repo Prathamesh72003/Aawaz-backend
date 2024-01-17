@@ -12,8 +12,8 @@ my_key = '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'
 
 db = firestore.client()
 
-VONAGE_API_KEY = "1ce5e2b3"
-VONAGE_API_SECRET = "Nfm7AZb5HnqLNJ1n"
+VONAGE_API_KEY = "b6181f7e"
+VONAGE_API_SECRET = "4DDW7uDPy0xpW9ho"
 
 vonage_client = Client(key=VONAGE_API_KEY, secret=VONAGE_API_SECRET)
 
